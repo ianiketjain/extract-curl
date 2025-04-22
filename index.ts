@@ -11,6 +11,8 @@ function Parsecurl(curlData: any) {
     headers: {},
     body: "",
     requestType: "",
+    contentType: "",
+    formDataArray: [],
     errorIfOccured: {
       message: "",
     },
@@ -30,7 +32,7 @@ function Parsecurl(curlData: any) {
     obj.requestType = methodMatch2[1];
   }
 
-  let validRequestTypeArr = [
+  let validRequestTypeArr: any = [
     "GET",
     "POST",
     "PUT",
@@ -111,7 +113,14 @@ function Parsecurl(curlData: any) {
   const bodyMatch = curlData.match(bodyRegex);
   const bodyMatch1 = curlData.match(bodyRegex1);
   if (bodyMatch) {
+    obj.contentType = "json";
     obj.body = bodyMatch[2].replace(/\\'/g, "'");
+
+    // '''hello''' with 'hello'
+    if (obj.body.includes("'''")) {
+      obj.body = obj.body.replaceAll("'''", "'");
+    }
+
     if (obj.requestType === "") {
       obj.requestType = "Post";
     }
@@ -142,6 +151,65 @@ function Parsecurl(curlData: any) {
 
       obj.body = JSON.stringify(formattedResponse);
       obj.requestType = "Post";
+    }
+  }
+
+  //Extract Form Data
+  const formDataRegex1 = /(?:--form|-F)\s+'([^']+)'/g;
+  const formDataRegex2 = /(?:--form|-F)\s+"([^"]+)"/g;
+  let formDataMatch;
+  let hasFormData = false;
+  const formData: any = new FormData();
+
+  // Handle --form or -F with single quotes
+  while ((formDataMatch = formDataRegex1.exec(curlData)) !== null) {
+    hasFormData = true;
+    const formField = formDataMatch[1];
+
+    let [key, ...valueParts] = formField.split("=");
+
+    let value: any = valueParts.join("=");
+
+    // Handle file uploads
+    if (value.startsWith("@")) {
+    } else {
+      try {
+        const parsedValue = JSON.parse(value);
+        formData.append(key, parsedValue);
+      } catch (error) {
+        formData.append(key, value);
+      }
+    }
+  }
+
+  // Handle --form or -F with double quotes
+  while ((formDataMatch = formDataRegex2.exec(curlData)) !== null) {
+    hasFormData = true;
+    const formField = formDataMatch[1];
+    let [key, ...valueParts] = formField.split("=");
+    let value: any = valueParts.join("=");
+
+    if (value.startsWith("@")) {
+    } else {
+      try {
+        formData.append(key, JSON.parse(value));
+      } catch (error) {
+        formData.append(key, value);
+      }
+    }
+  }
+
+  if (hasFormData) {
+    obj.contentType = "form-data";
+
+    const formDataArray: { key: string; value: string | File }[] = [];
+    Array.from(formData?.entries() || []).forEach(([key, value]: any) => {
+      formDataArray.push({ key, value });
+    });
+
+    obj.formDataArray = formDataArray;
+    if (obj.requestType === "") {
+      obj.requestType = "POST";
     }
   }
 

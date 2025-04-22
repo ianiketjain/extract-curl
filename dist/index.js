@@ -15,6 +15,8 @@ function Parsecurl(curlData) {
         headers: {},
         body: "",
         requestType: "",
+        contentType: "",
+        formDataArray: [],
         errorIfOccured: {
             message: "",
         },
@@ -111,7 +113,12 @@ function Parsecurl(curlData) {
     var bodyMatch = curlData.match(bodyRegex);
     var bodyMatch1 = curlData.match(bodyRegex1);
     if (bodyMatch) {
+        obj.contentType = "json";
         obj.body = bodyMatch[2].replace(/\\'/g, "'");
+        // '''hello''' with 'hello'
+        if (obj.body.includes("'''")) {
+            obj.body = obj.body.replaceAll("'''", "'");
+        }
         if (obj.requestType === "") {
             obj.requestType = "Post";
         }
@@ -142,6 +149,60 @@ function Parsecurl(curlData) {
             });
             obj.body = JSON.stringify(formattedResponse_1);
             obj.requestType = "Post";
+        }
+    }
+    //Extract Form Data
+    var formDataRegex1 = /(?:--form|-F)\s+'([^']+)'/g;
+    var formDataRegex2 = /(?:--form|-F)\s+"([^"]+)"/g;
+    var formDataMatch;
+    var hasFormData = false;
+    var formData = new FormData();
+    // Handle --form or -F with single quotes
+    while ((formDataMatch = formDataRegex1.exec(curlData)) !== null) {
+        hasFormData = true;
+        var formField = formDataMatch[1];
+        var _c = formField.split("="), key = _c[0], valueParts = _c.slice(1);
+        var value = valueParts.join("=");
+        // Handle file uploads
+        if (value.startsWith("@")) {
+        }
+        else {
+            try {
+                var parsedValue = JSON.parse(value);
+                formData.append(key, parsedValue);
+            }
+            catch (error) {
+                formData.append(key, value);
+            }
+        }
+    }
+    // Handle --form or -F with double quotes
+    while ((formDataMatch = formDataRegex2.exec(curlData)) !== null) {
+        hasFormData = true;
+        var formField = formDataMatch[1];
+        var _d = formField.split("="), key = _d[0], valueParts = _d.slice(1);
+        var value = valueParts.join("=");
+        if (value.startsWith("@")) {
+        }
+        else {
+            try {
+                formData.append(key, JSON.parse(value));
+            }
+            catch (error) {
+                formData.append(key, value);
+            }
+        }
+    }
+    if (hasFormData) {
+        obj.contentType = "form-data";
+        var formDataArray_1 = [];
+        Array.from((formData === null || formData === void 0 ? void 0 : formData.entries()) || []).forEach(function (_a) {
+            var key = _a[0], value = _a[1];
+            formDataArray_1.push({ key: key, value: value });
+        });
+        obj.formDataArray = formDataArray_1;
+        if (obj.requestType === "") {
+            obj.requestType = "POST";
         }
     }
     if (obj.requestType === "") {
